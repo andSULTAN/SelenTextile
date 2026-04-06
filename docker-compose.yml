@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # 1. Asosiy Bazamiz (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: selentextile_db
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${DB_NAME:-selenerp_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Baza ma'lumotlari zaxirasi
+    networks:
+      - erp_net
+
+  # 2. Xabarlar va Real-Time jarayonlar dvigateli (Redis)
+  redis:
+    image: redis:alpine
+    container_name: selentextile_redis
+    restart: always
+    networks:
+      - erp_net
+
+  # 3. Asosiy Mantiqiy Qism (Django Backend API)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: selentextile_backend
+    # Gunicorn - asinxron production python serveri (4 ta woker yordamida tezkor javob beradi)
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2
+    restart: always
+    env_file: .env # Muhit sozlamalarini oldin yaratgan env fayldan ushlaydi
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+    volumes:
+      # Loyiadagi .env fayli orqali ham bular ishlashi mumkin
+      - .:/app
+      - media_volume:/app/media # Xodimlar rasmi va PDF lar yo'qolmasligi uchun himoyalandi !
+      - static_volume:/app/staticfiles # Django Statik fayllari
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - erp_net
+
+  # 4. Celery (Avtomatlashtirilgan fondagi Og'ir hisobot chiqaruvchi worker)
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: selentextile_celery
+    command: celery -A config worker -l info
+    restart: always
+    env_file: .env
+    environment:
+      - DB_HOST=db
+      - REDIS_URL=redis://redis:6379/1
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - erp_net
+
+  # 5. Tashqi qoplama (Next.js Frontend UI)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: selentextile_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - erp_net
+
+# Virtual Qattiq disk xotiralar zaxirasi
+volumes:
+  postgres_data:
+  media_volume:
+  static_volume:
+
+    # Izolyatsiya qilingan (Haker buzolmaydigan) lokal tarmoq
+networks:
+  erp_net:
+    driver: bridge
