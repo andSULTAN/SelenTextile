@@ -209,6 +209,24 @@ class Bichuv(InventoryBase):
                     )
                 })
 
+        # FabricInventory available_kg validation
+        if self.batch_number and getattr(self, 'weight_kg', 0) > 0:
+            from django.db.models import Sum
+            fabric = FabricInventory.objects.filter(batch_number=self.batch_number).first()
+            if fabric:
+                bichuv_qs = Bichuv.objects.filter(batch_number=self.batch_number)
+                if self.pk:
+                    bichuv_qs = bichuv_qs.exclude(pk=self.pk)
+                used = bichuv_qs.aggregate(total=Sum("weight_kg"))["total"] or 0
+                available = float(fabric.total_kg) - float(used) - float(fabric.waste_kg)
+                if float(self.weight_kg) > available:
+                    raise ValidationError({
+                        "weight_kg": _(
+                            f"Xatolik: Bichuvdan chiqayotgan og'irlik ({self.weight_kg} kg) "
+                            f"FabricInventory qoldig'idan ({available:.2f} kg) oshib ketdi!"
+                        )
+                    })
+
 
 # ──────────────────────────────────────────────
 # Upakovka (Qadoqlash)
@@ -297,3 +315,151 @@ class Upakovka(InventoryBase):
                         f"Bichuvdan olingan mahsulot sonidan ({self.bichuv.quantity}) oshib ketdi!"
                     )
                 })
+
+
+# ──────────────────────────────────────────────
+# Fabric Inventory (Yangi Gazlama Modeli)
+# ──────────────────────────────────────────────
+class FabricInventory(models.Model):
+    class WasteType(models.TextChoices):
+        DEFECT = "defect", _("Zavod braki (Defect)")
+        CUTTING = "cutting", _("Qiyqindi (Cutting waste)")
+        OTHER = "other", _("Boshqa (Other)")
+
+    supplier_weaver = models.CharField(_("to'quvchi"), max_length=200, blank=True)
+    supplier_dyer = models.CharField(_("bo'yoqchi"), max_length=200, blank=True)
+    batch_number = models.CharField(_("partiya raqami"), max_length=50, unique=True, db_index=True)
+    total_kg = models.PositiveIntegerField(_("jami kg"))
+    roll_count = models.PositiveIntegerField(_("rulonlar soni"))
+    assigned_models = models.ManyToManyField(ProductModel, related_name="fabric_batches", verbose_name=_("biriktirilgan modellar"), blank=True)
+    fabric_image = models.ImageField(_("gazlama rasmi"), upload_to="fabrics/%Y/%m/", blank=True, null=True)
+    waste_kg = models.PositiveIntegerField(_("isrof kg"), default=0)
+    waste_type = models.CharField(_("isrof turi"), max_length=20, choices=WasteType.choices, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Fabric Inventory")
+        verbose_name_plural = _("Fabric Inventories")
+
+    def __str__(self):
+        return f"{self.batch_number} ({self.total_kg} kg)"
+
+    @property
+    def available_kg(self):
+        bichuv_used = (
+            Bichuv.objects.filter(batch_number=self.batch_number)
+            .aggregate(s=models.Sum('weight_kg'))['s'] or 0
+        )
+        brak_total = (
+            self.brak_logs.aggregate(s=models.Sum('kg'))['s'] or 0
+        )
+        return float(self.total_kg) - float(bichuv_used) - float(self.waste_kg) - float(brak_total)
+
+    @property
+    def total_brak_kg(self):
+        """waste_kg (kirimda kiritilgan) + BrakLog yig'indisi."""
+        brak_sum = self.brak_logs.aggregate(s=models.Sum('kg'))['s'] or 0
+        return float(self.waste_kg) + float(brak_sum)
+
+
+# ──────────────────────────────────────────────
+# Stock Threshold (Kam qoldiqni nazorat qilish)
+# ──────────────────────────────────────────────
+class StockThreshold(models.Model):
+    product_model = models.ForeignKey(ProductModel, on_delete=models.CASCADE, related_name="thresholds", verbose_name=_("model"))
+    material_type = models.CharField(_("xom-ashyo turi"), max_length=100, default="Gazlama")
+    min_kg = models.PositiveIntegerField(_("minimal chegara (kg)"))
+
+    class Meta:
+        verbose_name = _("Zaxira chegarasi")
+        verbose_name_plural = _("Zaxira chegaralari")
+
+    def __str__(self):
+        return f"{self.product_model.name} uchun min: {self.min_kg}kg"
+
+
+# ──────────────────────────────────────────────
+# BrakLog — operatsion brak qayd kitobi
+# ──────────────────────────────────────────────
+class BrakLog(models.Model):
+    """
+    Sklad partiyasi bo'yicha aniqlangan braklar.
+    Har bir yozuv FabricInventory.available_kg ni kamaytiradi.
+    """
+
+    class BrakType(models.TextChoices):
+        WEAVER = "tovuvchi",  _("To'quvchi braki")
+        CUTTER = "bichuvchi", _("Bichuvchi braki")
+        MIXED  = "aralash",   _("Ikkalasi (aralash)")
+
+    fabric = models.ForeignKey(
+        FabricInventory,
+        on_delete=models.PROTECT,
+        related_name="brak_logs",
+        verbose_name=_("partiya"),
+    )
+    kg = models.PositiveIntegerField(_("brak kg"))
+    brak_type = models.CharField(
+        _("brak turi"), max_length=20, choices=BrakType.choices,
+    )
+    note = models.TextField(_("izoh"), blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        verbose_name=_("kim kiritdi"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Brak logi")
+        verbose_name_plural = _("Brak loglari")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"{self.fabric.batch_number} — {self.kg} kg "
+            f"({self.get_brak_type_display()})"
+        )
+
+
+import requests
+from django.db.models.signals import m2m_changed, post_save
+from django.dispatch import receiver
+
+@receiver(m2m_changed, sender=FabricInventory.assigned_models.through)
+def fabric_assigned_models_changed(sender, instance, action, **kwargs):
+    if action == "post_add":
+        for pm in instance.assigned_models.all():
+            pm.status = 'active'
+            pm.save()
+
+def send_telegram_alert(message):
+    # Placeholder
+    bot_token = "BOT_TOKEN"
+    chat_id = "CHAT_ID"
+    if not bot_token or bot_token == "BOT_TOKEN": return
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    try:
+        requests.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, timeout=5)
+    except:
+        pass
+
+@receiver(post_save, sender=Bichuv)
+def check_stock_threshold_alert(sender, instance, **kwargs):
+    try:
+        fabric = FabricInventory.objects.filter(batch_number=instance.batch_number).first()
+        if not fabric: return
+        
+        current_kg = fabric.available_kg
+        
+        assigned = fabric.assigned_models.all()
+        for pm in assigned:
+            threshold = StockThreshold.objects.filter(product_model=pm).first()
+            if threshold and current_kg < threshold.min_kg:
+                msg = f"⚠️ <b>DIQQAT!</b>\n\n<b>Model:</b> {pm.name}\n<b>Mato zaxirasi tugamoqda:</b> {current_kg} kg qoldi!\n<b>Partiya:</b> {fabric.batch_number}"
+                send_telegram_alert(msg)
+    except Exception:
+        pass
