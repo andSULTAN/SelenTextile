@@ -19,7 +19,7 @@ class WorkerSerializer(serializers.ModelSerializer):
             "photo", "full_name",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "code", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_full_name(self, obj):
         return obj.full_name

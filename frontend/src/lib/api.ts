@@ -12,14 +12,28 @@ async function apiFetch<T>(
   const method = options.method?.toUpperCase() ?? "GET";
   const needsCsrf = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
 
+  const headers: Record<string, string> = {
+    ...(needsCsrf ? { "X-CSRFToken": getCsrfToken() } : {}),
+    ...(options.headers as any),
+  };
+
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData || 
+                     (options.body && typeof (options.body as any).append === 'function');
+
+  // If we're sending FormData, don't explicitly set Content-Type
+  // so the browser can append the boundary string automatically.
+  if (!isFormData) {
+    if (!headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  } else {
+    delete headers["Content-Type"];
+  }
+
   const res = await fetch(url, {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(needsCsrf ? { "X-CSRFToken": getCsrfToken() } : {}),
-      ...options.headers,
-    },
     ...options,
+    headers,
   });
 
   if (!res.ok) {
@@ -157,6 +171,7 @@ export const workersApi = {
     ),
   lookup: (code: string) =>
     apiFetch<Worker>(`/workers/lookup/?code=${encodeURIComponent(code)}`),
+  delete: (id: number) => apiFetch<{ message: string }>(`/workers/${id}/`, { method: "DELETE" }),
 };
 
 // Products
@@ -196,9 +211,19 @@ export const workLogsApi = {
 // Inventory
 export const inventoryApi = {
   skladList: () => apiFetch<{ results: any[] }>("/inventory/sklad/"),
+  fabricList: () => apiFetch<{ results: any[] }>("/inventory/fabric/"),
+  fabricCreate: (data: FormData) => apiFetch<any>("/inventory/fabric/", { method: "POST", body: data }),
+  fabricHistory: (batch: string) => apiFetch<any>(`/inventory/fabric-history/?batch=${batch}`),
+  supplierAnalytics: () => apiFetch<any>("/inventory/supplier-analytics/"),
   bichuvList: () => apiFetch<{ results: any[] }>("/inventory/bichuv/"),
   upakovkaList: () => apiFetch<{ results: any[] }>("/inventory/upakovka/"),
   chainAnalysis: (batchValue: string) => apiFetch<any>(`/inventory/chain-analysis/?batch_number=${batchValue}`),
+  brakCreate: (data: {
+    fabric: number;
+    kg: number;
+    brak_type: string;
+    note?: string;
+  }) => apiFetch<any>("/inventory/brak/", { method: "POST", body: JSON.stringify(data) }),
   bichuvCreate: (data: {
     sklad: number;
     batch_number: string;
@@ -215,6 +240,39 @@ export const inventoryApi = {
     defect_count: number;
     pack_date: string;
   }) => apiFetch<any>("/inventory/upakovka/", { method: "POST", body: JSON.stringify(data) }),
+
+  // Bichuv Kirim
+  bichuvKirimList: () => apiFetch<{ results: any[] }>("/inventory/bichuv-kirim/"),
+  bichuvKirimBatchCreate: (items: {
+    fabric: number;
+    product_model: number;
+    weight_kg: number;
+    roll_count: number;
+  }[]) => apiFetch<any>("/inventory/bichuv-kirim/batch-create/", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  }),
+  bichuvKirimAvailableForChiqim: () =>
+    apiFetch<any[]>("/inventory/bichuv-kirim/available-for-chiqim/"),
+
+  // Bichuv Chiqim
+  bichuvChiqimList: () => apiFetch<{ results: any[] }>("/inventory/bichuv-chiqim/"),
+  bichuvChiqimCreate: (data: {
+    fabric: number;
+    product_model: number;
+    ish_soni: number;
+    beka_kg: number;
+    kesim_number?: number;
+  }) => apiFetch<any>("/inventory/bichuv-chiqim/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }),
+  bichuvChiqimNextKesim: (fabricId: number, modelId: number) =>
+    apiFetch<{ next_kesim: number }>(`/inventory/bichuv-chiqim/next-kesim/?fabric=${fabricId}&product_model=${modelId}`),
+
+  // Fabric Models
+  fabricModels: (fabricId: number) =>
+    apiFetch<any[]>(`/inventory/fabric-models/?fabric=${fabricId}`),
 };
 
 // Reports
@@ -223,3 +281,4 @@ export const reportsApi = {
   excelUrl: () => `${API_BASE}/reports/excel/`,
   pdfSlipUrl: (workerId: number) => `${API_BASE}/reports/pdf-slip/?worker_id=${workerId}`,
 };
+

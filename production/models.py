@@ -69,6 +69,20 @@ class ProductModel(models.Model):
         return f"{self.name} ({self.get_status_display()})"
 
 
+class ProductModelImage(models.Model):
+    product_model = models.ForeignKey(ProductModel, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(_("rasm"), upload_to="products/%Y/%m/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Model rasmi")
+        verbose_name_plural = _("Model rasmlari")
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.product_model.name} rasmi"
+
+
 # ──────────────────────────────────────────────
 # Work Type (Ish turi)
 # ──────────────────────────────────────────────

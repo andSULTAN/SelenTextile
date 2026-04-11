@@ -27,12 +27,13 @@ Ushbu loyiha Selen Textile tikuvchilik fabrikasining ishchilari, ishlab chiqaris
   - **Oylik TOP-10**: Jami summa bo'yicha oy yulduzlari.
   - **Sifat Nazorati**: Bugungi jami brak foizi (Alert tizimi bilan).
 
-### 3. `inventory` (Zanjir Tahlili va Validatsiya)
-- **Sklad → Bichuv → Upakovka**: Mahsulotning to'liq zanjirini (Batch Tracking) partiya raqami orqali kuzatish.
-- **Qat'iy Validatsiyalar**:
-  - Bichuv og'irligi Sklad dagi gazlamadan oshmasligi kerak.
-  - Upakovka qilingan jami mahsulot (Tayyor + Brak) Bichuvdan chiqqan miqdordan oshmasligi kerak.
-- **Waste Analysis**: Gazlama isrofini (Waste) va upakovka samaradorligini hisoblash.
+### 3. `inventory` (Zanjir Tahlili, Analytics va Media) - **v4.0 YANGILANISH**
+- **Fabric Image Support**: Har bir mato kirimida uning haqiqiy rasmini yuklash va ro'yxatda (`preview`) ko'rish.
+- **Multi-Model Assignment**: Bir partiya (Batch) matosiga bir vaqtning o'zida bir nechta tikuv modellarini biriktirish imkoniyati.
+- **Cutting-Ready Media**: Har bir model uchun bir nechta rasmlarni (eskizlar) yuklash. Bichuv bo'limi uchun maxsus **Image Slider** (Slayd-shou) orqali rasmlarni batafsil ko'rish.
+- **Stock Threshold Alerts**: `FabricInventory` dagi qoldiq belgilangan minimal miqdordan (`min_kg`) kamayganda, **Telegram Bot** orqali adminga avtomatik ogohlantirish yuborish.
+- **Supplier Analytics**: To'quvchi va Bo'yoqchilar kesimida samaradorlik (Efficiency) va brak (Waste) foizini hisoblaydigan tahliliy API.
+- **Integer Weights**: Hamma og'irliklar (Kg) va miqdorlar butun sonlar (`PositiveIntegerField`) shakliga o'tkazildi (Sklad xodimlari uchun soddalashtirildi).
 
 ---
 
@@ -47,9 +48,10 @@ Ushbu loyiha Selen Textile tikuvchilik fabrikasining ishchilari, ishlab chiqaris
 - Oyliklarni oyma-oy filtrlash va yopish (Pay) tugmasi.
 - Xodimlar ro'yxatini boshqarish va aktivatsiya holatini o'zgartirish.
 
-### 3. Sensorli POS Terminal (`/touch/*`)
-- **Touch Advance**: Xodimlarga tezkor avans kiritish (Numpad).
-- **Quick Logging**: Bichuv va Upakovka ma'lumotlarini sensorli ekran orqali tezkor kiritish.
+### 3. Inventory UI/UX (`/inventory/*`)
+- **InventoryMenu**: Sidebar uchun maxsus "Sklad" menyusi: Glassmorphism dizayni, silliq toggle animatsiyasi va to'g'ridan-to'g'ri navigatsiya mantiqi.
+- **Waste Analytics Graph**: `Recharts` yordamida eng ko'p brak beruvchi yetkazib beruvchilarning "Eng yomon Top-5" antireyting diagrammasi.
+- **Touch Advance & Logging**: Xodimlarga tezkor avans kiritish (Numpad) va bichuv/upakovka loglarini sensorli ekran orqali kiritish.
 
 ---
 
@@ -74,4 +76,4 @@ docker-compose exec backend python manage.py migrate
 docker-compose exec backend python manage.py collectstatic --noinput
 ```
 
-*Oxirgi yangilanish: 2026-04-04 12:15 (v3.0 - Full Chain & Payroll Optimization)*
+*Oxirgi yangilanish: 2026-04-08 09:35 (v4.0 - Sklad Media, Analytics & Multiple Models)*

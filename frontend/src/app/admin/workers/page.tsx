@@ -5,7 +5,8 @@ import CRMLayout from "@/components/layout/CRMLayout";
 import { workersApi, type Worker, ApiError } from "@/lib/api";
 import {
   Search, UserPlus, Pencil, X, Check,
-  Loader2, Users, ChevronDown,
+  Loader2, Users, ChevronDown, Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 /* ── Rollar ro'yxati ── */
@@ -28,9 +29,9 @@ const STATUSES = [
 
 /* ── Bo'sh forma ── */
 const emptyForm = {
+  code: "",
   first_name: "",
   last_name: "",
-  middle_name: "",
   phone: "",
   role: "boshqa",
   status: "active",
@@ -60,6 +61,13 @@ export default function WorkersAdminPage() {
   const [form, setForm]             = useState<FormData>(emptyForm);
   const [saving, setSaving]         = useState(false);
   const [formError, setFormError]   = useState<string | null>(null);
+  const [codeExists, setCodeExists] = useState(false);
+  const [checkingCode, setCheckingCode] = useState(false);
+
+  /* Delete Confirmation */
+  const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   /* ── Fetch ── */
   const fetchWorkers = useCallback(async () => {
@@ -91,7 +99,14 @@ export default function WorkersAdminPage() {
     try {
       const res = await workersApi.toggleActive(worker.id);
       setWorkers(prev =>
-        prev.map(w => w.id === worker.id ? { ...w, is_active: res.is_active } : w)
+        [...prev]
+          .map(w => w.id === worker.id ? { ...w, is_active: res.is_active } : w)
+          .sort((a, b) => {
+            if (a.is_active === b.is_active) {
+              return a.last_name.localeCompare(b.last_name);
+            }
+            return a.is_active ? -1 : 1;
+          })
       );
     } catch {
       /* silent — foydalanuvchi ko'radi */
@@ -105,15 +120,16 @@ export default function WorkersAdminPage() {
     setEditingWorker(null);
     setForm(emptyForm);
     setFormError(null);
+    setCodeExists(false);
     setModalOpen(true);
   };
 
   const openEdit = (worker: Worker) => {
     setEditingWorker(worker);
     setForm({
+      code:        worker.code,
       first_name:  worker.first_name,
       last_name:   worker.last_name,
-      middle_name: worker.middle_name,
       phone:       worker.phone,
       role:        worker.role,
       status:      worker.status,
@@ -122,6 +138,33 @@ export default function WorkersAdminPage() {
     setModalOpen(true);
   };
 
+  /* ── Code Check ── */
+  useEffect(() => {
+    if (!modalOpen || !form.code || checkingCode) return;
+    
+    // Tahrir qilinayotgan ishchining o'z kodi bo'lsa tekshirmaymiz
+    if (editingWorker && form.code === editingWorker.code) {
+      setCodeExists(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingCode(true);
+      try {
+        const res = await workersApi.list({ search: form.code });
+        // Agar qidiruvda aynan shu kodli ishchi topilsa
+        const exists = res.results.some(w => w.code.toLowerCase() === form.code.toLowerCase());
+        setCodeExists(exists);
+      } catch (err) {
+        console.error("Code check error:", err);
+      } finally {
+        setCheckingCode(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [form.code, modalOpen, editingWorker]);
+
   const closeModal = () => {
     if (saving) return;
     setModalOpen(false);
@@ -129,8 +172,8 @@ export default function WorkersAdminPage() {
 
   /* ── Saqlash ── */
   const handleSave = async () => {
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setFormError("Ism va familiya kiritilishi shart.");
+    if (!form.code.trim() || !form.first_name.trim() || !form.last_name.trim()) {
+      setFormError("Kod, ism va familiya kiritilishi shart.");
       return;
     }
     setSaving(true);
@@ -153,6 +196,26 @@ export default function WorkersAdminPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  /* ── O'chirish ── */
+  const openDelete = (worker: Worker) => {
+    setDeletingWorker(worker);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingWorker) return;
+    setDeleting(true);
+    try {
+      await workersApi.delete(deletingWorker.id);
+      setWorkers(prev => prev.filter(w => w.id !== deletingWorker.id));
+      setDeleteModalOpen(false);
+    } catch {
+      alert("Xatolik: Ishchini o'chira olmadik (ehtimol uning ish loglari mavjud).");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -296,9 +359,12 @@ export default function WorkersAdminPage() {
 
                     {/* FISH */}
                     <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => openEdit(worker)}
+                        className="flex items-center gap-3 group text-left"
+                      >
                         {/* Avatar */}
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 overflow-hidden">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 overflow-hidden group-hover:ring-2 group-hover:ring-indigo-300 transition-all">
                           {worker.photo ? (
                             <img src={worker.photo} alt={worker.full_name} className="w-full h-full object-cover" />
                           ) : (
@@ -308,12 +374,11 @@ export default function WorkersAdminPage() {
                           )}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-800">{worker.full_name}</p>
-                          {worker.middle_name && (
-                            <p className="text-xs text-slate-400">{worker.middle_name}</p>
-                          )}
+                          <p className="text-sm font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors uppercase decoration-indigo-300 decoration-dotted underline-offset-4 hover:underline">
+                            {worker.full_name}
+                          </p>
                         </div>
-                      </div>
+                      </button>
                     </td>
 
                     {/* Lavozim */}
@@ -350,10 +415,11 @@ export default function WorkersAdminPage() {
                     {/* Amallar */}
                     <td className="px-5 py-4 text-center">
                       <button
-                        onClick={() => openEdit(worker)}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-indigo-200 transition-all"
+                        onClick={() => openDelete(worker)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-white hover:bg-red-500 px-3 py-1.5 rounded-lg border border-red-100 hover:border-red-500 transition-all opacity-0 group-hover:opacity-100"
+                        title="Ishchini o'chirish"
                       >
-                        <Pencil size={13} /> Tahrirlash
+                        <Trash2 size={13} /> O'chirish
                       </button>
                     </td>
                   </tr>
@@ -401,12 +467,18 @@ export default function WorkersAdminPage() {
             {/* Body */}
             <div className="px-6 py-5 space-y-4">
 
-              {editingWorker && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-medium">Ishchi kodi:</span>
-                  <span className="font-mono text-sm font-bold text-indigo-600">{editingWorker.code}</span>
-                </div>
-              )}
+              <div className="space-y-1">
+                <FormField
+                  label="Ishchi kodi *"
+                  value={form.code}
+                  placeholder="Masalan: W-001"
+                  onChange={v => setForm(f => ({ ...f, code: v }))}
+                />
+                {checkingCode && <p className="text-[10px] text-slate-400">Tekshirilmoqda...</p>}
+                {codeExists && !checkingCode && (
+                  <p className="text-[10px] text-amber-600 font-medium">⚠️ Bu kod bazada allaqachon mavjud!</p>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Familiya *" value={form.last_name}
@@ -414,9 +486,6 @@ export default function WorkersAdminPage() {
                 <FormField label="Ism *" value={form.first_name}
                   onChange={v => setForm(f => ({ ...f, first_name: v }))} />
               </div>
-
-              <FormField label="Sharif" value={form.middle_name}
-                onChange={v => setForm(f => ({ ...f, middle_name: v }))} />
 
               <FormField label="Telefon" value={form.phone} placeholder="+998 90 123 45 67"
                 onChange={v => setForm(f => ({ ...f, phone: v }))} />
@@ -462,6 +531,42 @@ export default function WorkersAdminPage() {
                   : <><Check size={16} /> Saqlash</>
                 }
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE MODAL ── */}
+      {deleteModalOpen && deletingWorker && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !deleting && setDeleteModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="text-red-500" size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Ishchini o'chirish?</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                <span className="font-bold text-slate-700">{deletingWorker.full_name}</span> ma'lumotlarini arxivga o'tkazmoqchimisiz? 
+                Uning kirim-chiqim tarixi saqlab qolinadi.
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  disabled={deleting}
+                  onClick={() => setDeleteModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  disabled={deleting}
+                  onClick={handleDelete}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  {deleting ? <Loader2 size={16} className="animate-spin" /> : "Ha, o'chirish"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

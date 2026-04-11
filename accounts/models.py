@@ -81,8 +81,7 @@ class Worker(models.Model):
         max_length=20,
         unique=True,
         db_index=True,
-        blank=True,          # save() da avtomatik to'ldiriladi
-        help_text=_("Bo'sh qoldirilsa avtomatik generatsiya bo'ladi (W-001, W-002, ...)"),
+        help_text=_("Ishchi uchun unikal identifikatsiya kodi"),
     )
 
     phone = models.CharField(_("telefon"), max_length=20, blank=True)
@@ -107,6 +106,12 @@ class Worker(models.Model):
         help_text=_("Nofaol ishchilar lookup va statistikadan chiqariladi"),
     )
 
+    is_deleted = models.BooleanField(
+        _("o'chirilganmi (arxivdami)?"),
+        default=False,
+        db_index=True,
+    )
+
     photo = models.ImageField(
         _("rasm"),
         upload_to="workers/photos/%Y/%m/",
@@ -120,7 +125,7 @@ class Worker(models.Model):
     class Meta:
         verbose_name = _("Ishchi")
         verbose_name_plural = _("Ishchilar")
-        ordering = ["last_name", "first_name"]
+        ordering = ["-is_active", "last_name", "first_name"]
 
     def __str__(self):
         return f"{self.last_name} {self.first_name} ({self.code})"
@@ -137,8 +142,6 @@ class Worker(models.Model):
         return f"W-{max_num + 1:03d}"
 
     def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = Worker.generate_code()
         super().save(*args, **kwargs)
 
     @property
@@ -182,7 +185,7 @@ class AdvancePayment(models.Model):
     """
     worker = models.ForeignKey(
         Worker, 
-        on_delete=models.CASCADE, 
+        on_delete=models.PROTECT, 
         related_name="advance_payments",
         verbose_name=_("ishchi")
     )

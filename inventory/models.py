@@ -425,6 +425,108 @@ class BrakLog(models.Model):
         )
 
 
+# ──────────────────────────────────────────────
+# BichuvKirim — Skladdan Bichuvga kirim
+# ──────────────────────────────────────────────
+class BichuvKirim(models.Model):
+    """
+    Skladdan Bichuvga qabul qilingan gazlama.
+    Menejer Sklad partiyasini tanlab, model, kg va rulon sonini kiritadi.
+    """
+    fabric = models.ForeignKey(
+        FabricInventory,
+        on_delete=models.PROTECT,
+        related_name="bichuv_kirim_items",
+        verbose_name=_("sklad partiyasi"),
+    )
+    product_model = models.ForeignKey(
+        ProductModel,
+        on_delete=models.PROTECT,
+        verbose_name=_("mahsulot modeli"),
+    )
+    weight_kg = models.PositiveIntegerField(
+        _("og'irligi (kg)"),
+        validators=[MinValueValidator(1)],
+    )
+    roll_count = models.PositiveIntegerField(
+        _("rulonlar soni"),
+        default=1,
+        validators=[MinValueValidator(1)],
+    )
+    note = models.TextField(_("izoh"), blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Bichuv Kirim")
+        verbose_name_plural = _("Bichuv Kirimlar")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"BichuvKirim: {self.fabric.batch_number} → "
+            f"{self.product_model.name} ({self.weight_kg} kg, {self.roll_count} rulon)"
+        )
+
+
+# ──────────────────────────────────────────────
+# BichuvChiqim — Bichuvdan tikuvga chiqim
+# ──────────────────────────────────────────────
+class BichuvChiqim(models.Model):
+    """
+    Bichuvdan tikuvga chiqarilgan mahsulot.
+    Har bir partiya+model kombinatsiyasida kesim raqami avtomatik oshib boradi.
+    Beka — gazlamani kesib, kiyim uchun bichganidan chiqqan ortiqcha qoldiq (kg).
+    """
+    fabric = models.ForeignKey(
+        FabricInventory,
+        on_delete=models.PROTECT,
+        related_name="bichuv_chiqim_items",
+        verbose_name=_("sklad partiyasi"),
+    )
+    product_model = models.ForeignKey(
+        ProductModel,
+        on_delete=models.PROTECT,
+        verbose_name=_("mahsulot modeli"),
+    )
+    kesim_number = models.PositiveIntegerField(
+        _("kesim raqami"),
+        help_text=_("Bir xil partiya+model uchun avtomatik oshib boradi"),
+    )
+    ish_soni = models.PositiveIntegerField(
+        _("ish soni"),
+        validators=[MinValueValidator(1)],
+    )
+    beka_kg = models.PositiveIntegerField(
+        _("beka (kg)"),
+        default=0,
+        help_text=_("Gazlamani bichganidan chiqqan ortiqcha qoldiq"),
+    )
+    note = models.TextField(_("izoh"), blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Bichuv Chiqim")
+        verbose_name_plural = _("Bichuv Chiqimlar")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"BichuvChiqim: {self.fabric.batch_number} → "
+            f"{self.product_model.name} ({self.kesim_number}-kesim, "
+            f"{self.ish_soni} dona, beka: {self.beka_kg} kg)"
+        )
+
+    def save(self, *args, **kwargs):
+        # Kesim raqamini avtomatik hisoblash (yangi yozuv uchun)
+        if not self.pk and not self.kesim_number:
+            last = BichuvChiqim.objects.filter(
+                fabric=self.fabric,
+                product_model=self.product_model,
+            ).order_by("-kesim_number").first()
+            self.kesim_number = (last.kesim_number + 1) if last else 1
+        super().save(*args, **kwargs)
+
+
 import requests
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver

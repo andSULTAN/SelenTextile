@@ -27,7 +27,7 @@ class WorkerViewSet(viewsets.ModelViewSet):
     POST   /api/workers/{id}/toggle-active/ — faollik holatini almashtirish
     GET    /api/workers/lookup/?code=W-001  — faqat aktiv ishchi qidirish
     """
-    queryset = Worker.objects.all()
+    queryset = Worker.objects.filter(is_deleted=False)
     serializer_class = WorkerSerializer
 
     def get_queryset(self):
@@ -54,6 +54,11 @@ class WorkerViewSet(viewsets.ModelViewSet):
                 Q(code__icontains=search)
             )
         return qs
+
+    def perform_destroy(self, instance):
+        instance.is_deleted = True
+        instance.is_active = False
+        instance.save()
 
     @action(detail=True, methods=["post"], url_path="toggle-active")
     def toggle_active(self, request, pk=None):

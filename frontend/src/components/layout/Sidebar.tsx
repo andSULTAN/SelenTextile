@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   X,
 } from "lucide-react";
+import InventoryMenu from "./InventoryMenu";
 
 /* ── Navigation items ── */
 const NAV_SECTIONS = [
@@ -38,9 +39,7 @@ const NAV_SECTIONS = [
   {
     title: "Ombor",
     items: [
-      { label: "Sklad", href: "/inventory/sklad", icon: Warehouse },
-      { label: "Bichuv", href: "/inventory/bichuv", icon: Scissors },
-      { label: "Upakovka", href: "/inventory/upakovka", icon: Package },
+      { label: "Sklad", href: "/inventory/sklad", icon: Warehouse, customComponent: "InventoryMenu" },
     ],
   },
 ];
@@ -131,6 +130,14 @@ export default function Sidebar({
             )}
             <ul className="space-y-0.5">
               {section.items.map((item) => {
+                if ((item as any).customComponent === "InventoryMenu") {
+                  return (
+                    <li key="inventory-menu">
+                      <InventoryMenu collapsed={collapsed} isMobile={isMobile} onClose={onClose} />
+                    </li>
+                  );
+                }
+
                 const Icon = item.icon;
                 const active = isActive(item.href);
                 return (

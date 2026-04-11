@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ProductModel, WorkType, WorkLog
+from .models import ProductModel, ProductModelImage, WorkType, WorkLog
 from accounts.serializers import WorkerLookupSerializer
 
 
@@ -13,14 +13,21 @@ class WorkTypeSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+class ProductModelImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductModelImage
+        fields = ['id', 'image', 'created_at']
+
+
 class ProductModelSerializer(serializers.ModelSerializer):
     """ProductModel + unga biriktirilgan WorkTypelar."""
     work_types = WorkTypeSerializer(many=True, read_only=True)
+    images = ProductModelImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = ProductModel
         fields = [
-            "id", "name", "code", "description", "status", "image",
+            "id", "name", "code", "description", "status", "image", "images",
             "work_types",
             "created_at", "updated_at",
         ]
