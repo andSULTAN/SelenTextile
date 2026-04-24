@@ -117,41 +117,83 @@ export interface WorkLog {
 
 /* ── API Functions ── */
 
+export interface SystemUser {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  role: string;
+  role_display: string;
+  permissions_list: string[];
+  is_active: boolean;
+  full_name: string;
+  date_joined: string;
+}
+
 // Auth
 export const authApi = {
-  login: (username: string, password: string) =>
-    apiFetch<{ id: number; username: string; full_name: string; role: string }>(
-      "/auth/login/", { method: "POST", body: JSON.stringify({ username, password }) }
+  login: (username: string, credential: string, mode: "password" | "pin" = "password") =>
+    apiFetch<{ id: number; username: string; full_name: string; role: string; permissions: string[] }>(
+      "/auth/login/", {
+        method: "POST",
+        body: JSON.stringify(mode === "pin" ? { username, pin: credential } : { username, password: credential }),
+      }
+    ),
+  pinLogin: (pin: string) =>
+    apiFetch<{ id: number; role: string; name: string; permissions: string[] }>(
+      "/touch/pin-login/", { method: "POST", body: JSON.stringify({ pin }) }
     ),
   logout: () => apiFetch<{ message: string }>("/auth/logout/", { method: "POST" }),
   me: () =>
-    apiFetch<{ id: number; username: string; full_name: string; role: string }>("/auth/me/"),
+    apiFetch<{ id: number; username: string; full_name: string; role: string; permissions: string[] }>("/auth/me/"),
+};
+
+// System users
+export const usersApi = {
+  list: () => apiFetch<{ results: SystemUser[] }>("/users/"),
+  create: (data: Record<string, unknown>) =>
+    apiFetch<SystemUser>("/users/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Record<string, unknown>) =>
+    apiFetch<SystemUser>(`/users/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  delete: (id: number) =>
+    apiFetch<void>(`/users/${id}/`, { method: "DELETE" }),
+  setPermissions: (id: number, permissions: string[]) =>
+    apiFetch<{ permissions: string[] }>(`/users/${id}/set-permissions/`, {
+      method: "POST", body: JSON.stringify({ permissions }),
+    }),
+  toggleActive: (id: number) =>
+    apiFetch<{ id: number; is_active: boolean }>(`/users/${id}/toggle-active/`, { method: "POST" }),
+  permissionChoices: () =>
+    apiFetch<Array<{ codename: string; label: string }>>("/permissions/"),
 };
 
 // Accounts (Workers)
 export const accountsApi = {
   // Workers
-  workersList: () => apiFetch<{ results: Worker[] }>("/accounts/workers/"),
-  lookup: (code: string) => apiFetch<Worker>(`/accounts/workers/lookup/?code=${code}`),
-  
+  workersList: () => apiFetch<{ results: Worker[] }>("/workers/"),
+  lookup: (code: string) => apiFetch<Worker>(`/workers/lookup/?code=${code}`),
+
   // Advances
-  advanceList: () => apiFetch<{ results: any[] }>("/accounts/advances/"),
+  advanceList: () => apiFetch<{ results: any[] }>("/advances/"),
+  advancesByWorker: (workerId: number, month: number, year: number) =>
+    apiFetch<{ results: any[] }>(`/advances/?worker=${workerId}&month=${month}&year=${year}`),
   advanceCreate: (data: { worker: number; amount: number; description?: string; manager?: number }) =>
-    apiFetch<any>("/accounts/advances/", {
+    apiFetch<any>("/advances/", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   // Payroll
-  payrollList: (month: number, year: number) => 
-    apiFetch<any[]>(`/accounts/payroll/?month=${month}&year=${year}`),
+  payrollList: (month: number, year: number) =>
+    apiFetch<any[]>(`/payroll/?month=${month}&year=${year}`),
   paySalary: (data: { worker_id: number; month: number; year: number }) =>
-    apiFetch<any>("/accounts/pay-salary/", {
+    apiFetch<any>("/pay-salary/", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   exportPayrollUrl: (month: number, year: number) =>
-    `${API_BASE}/accounts/export-payroll/?month=${month}&year=${year}`,
+    `${API_BASE}/export-payroll/?month=${month}&year=${year}`,
 };
 
 // Workers
@@ -277,7 +319,10 @@ export const inventoryApi = {
 
 // Reports
 export const reportsApi = {
-  stats: () => apiFetch<Array<{ date: string; volume: number; defect_pct: number }>>("/reports/stats/"),
+  stats: (params?: { date_from?: string; date_to?: string }) => {
+    const qs = params ? `?${new URLSearchParams(params as Record<string, string>)}` : "";
+    return apiFetch<Array<{ date: string; volume: number; defect_pct: number }>>(`/reports/stats/${qs}`);
+  },
   excelUrl: () => `${API_BASE}/reports/excel/`,
   pdfSlipUrl: (workerId: number) => `${API_BASE}/reports/pdf-slip/?worker_id=${workerId}`,
 };

@@ -1,0 +1,14 @@
+django
+djangorestframework
+django-cors-headers
+django-filter
+psycopg2-binary
+python-dotenv
+openpyxl
+reportlab
+gunicorn
+celery
+redis
+django-environ
+whitenoise
+requests

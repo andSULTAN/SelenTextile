@@ -14,15 +14,53 @@ from django.utils.translation import gettext_lazy as _
 # ──────────────────────────────────────────────
 # Custom User
 # ──────────────────────────────────────────────
+PERMISSION_CHOICES = [
+    ("view_dashboard",  "Dashboard ko'rish"),
+    ("view_workers",    "Ishchilar ro'yxatini ko'rish"),
+    ("add_worker",      "Ishchi qo'shish"),
+    ("edit_worker",     "Ishchi tahrirlash"),
+    ("delete_worker",   "Ishchi o'chirish"),
+    ("add_worklog",     "Ish kiritish"),
+    ("edit_worklog",    "Ish tahrirlash (30 daqiqa)"),
+    ("view_sklad",      "Sklad ko'rish"),
+    ("add_sklad",       "Sklad kirim"),
+    ("add_brak",        "Brak qo'shish"),
+    ("view_bichuv",     "Bichuv ko'rish"),
+    ("add_bichuv",      "Bichuvga kirim/chiqim"),
+    ("view_upakovka",   "Upakovka ko'rish"),
+    ("add_upakovka",    "Upakovka kiritish"),
+    ("view_payroll",    "Oyliklarni ko'rish"),
+    ("manage_payroll",  "Oylik boshqarish"),
+    ("add_avans",       "Avans berish"),
+    ("view_reports",    "Hisobotlar ko'rish"),
+    ("export_reports",  "Excel/PDF export"),
+]
+
+ALL_PERMISSIONS = [p[0] for p in PERMISSION_CHOICES]
+
+DEFAULT_ROLE_PERMISSIONS = {
+    "admin":   ALL_PERMISSIONS,
+    "manager": [
+        "view_dashboard", "view_workers", "add_worklog", "edit_worklog",
+        "view_sklad", "view_bichuv", "view_upakovka", "add_avans", "view_reports",
+    ],
+    "cutter":  ["view_bichuv", "add_bichuv"],
+    "packer":  ["view_upakovka", "add_upakovka"],
+    "tv":      ["view_dashboard"],
+}
+
+
 class CustomUser(AbstractUser):
     """
     Role-based foydalanuvchi.
-    Django default User dan farqi: role maydoni qo'shilgan.
+    Django default User dan farqi: role va permissions_list maydoni qo'shilgan.
     """
 
     class Role(models.TextChoices):
         ADMIN   = "admin",   _("Admin")
         MANAGER = "manager", _("Manager")
+        CUTTER  = "cutter",  _("Bichuvchi")
+        PACKER  = "packer",  _("Qadoqchi")
         TV      = "tv",      _("TV (Monitor)")
 
     role = models.CharField(
@@ -32,11 +70,25 @@ class CustomUser(AbstractUser):
         default=Role.MANAGER,
     )
 
-    # Profil ma'lumotlari
     phone = models.CharField(
         _("telefon raqami"),
         max_length=20,
         blank=True,
+    )
+
+    permissions_list = models.JSONField(
+        _("huquqlar"),
+        default=list,
+        blank=True,
+        help_text=_("Granular huquqlar kodlari ro'yxati"),
+    )
+
+    pin = models.CharField(
+        _("PIN kod"),
+        max_length=128,  # hashed saqlanadi
+        blank=True,
+        default="",
+        help_text=_("4 xonali PIN (Manager/Cutter/Packer uchun kirish)"),
     )
 
     created_at = models.DateTimeField(_("yaratilgan vaqt"), auto_now_add=True)

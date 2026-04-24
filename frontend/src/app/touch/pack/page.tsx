@@ -1,11 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import TouchLayout from "@/components/layout/TouchLayout";
 import { inventoryApi, ApiError } from "@/lib/api";
 import { AlertTriangle, CheckCircle2, ChevronRight, Loader2, Minus, Plus } from "lucide-react";
 
 export default function TouchPackPage() {
+  const router = useRouter();
+
+  // Double-guard: middleware + page level
+  useEffect(() => {
+    const match = document.cookie.match(/(?:^|;\s*)userRole=([^;]+)/);
+    const role = match ? match[1] : '';
+    if (role === 'ADMIN' || role === 'MANAGER') router.replace('/');
+  }, [router]);
+
   const [bichuvBatches, setBichuvBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

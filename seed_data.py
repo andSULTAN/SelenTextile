@@ -12,7 +12,7 @@ from accounts.models import CustomUser, Worker
 from production.models import ProductModel, WorkType, WorkLog
 from datetime import date
 
-# ── 1. Superuser / Manager ──
+# -- 1. Superuser / Manager --
 admin_user, created = CustomUser.objects.get_or_create(
     username="admin",
     defaults={
@@ -26,7 +26,7 @@ admin_user, created = CustomUser.objects.get_or_create(
 if created:
     admin_user.set_password("admin123")
     admin_user.save()
-    print("✅ Admin yaratildi: admin / admin123")
+    print("[OK] Admin yaratildi: admin / admin123")
 
 manager, created = CustomUser.objects.get_or_create(
     username="manager1",
@@ -39,9 +39,9 @@ manager, created = CustomUser.objects.get_or_create(
 if created:
     manager.set_password("manager123")
     manager.save()
-    print("✅ Manager yaratildi: manager1 / manager123")
+    print("[OK] Manager yaratildi: manager1 / manager123")
 
-# ── 2. Workers ──
+# -- 2. Workers --
 workers_data = [
     {"first_name": "Alisher", "last_name": "Karimov", "middle_name": "Bahodirovich", "code": "W-001", "phone": "+998901234567"},
     {"first_name": "Nilufar", "last_name": "Azimova", "middle_name": "Rustamovna", "code": "W-015", "phone": "+998901234568"},
@@ -54,9 +54,9 @@ workers_data = [
 for wd in workers_data:
     w, created = Worker.objects.get_or_create(code=wd["code"], defaults=wd)
     if created:
-        print(f"  👷 Ishchi yaratildi: {w.full_name} ({w.code})")
+        print(f"  [Worker] Ishchi yaratildi: {w.full_name} ({w.code})")
 
-# ── 3. Product Models ──
+# -- 3. Product Models --
 models_data = [
     {"name": "Futbolka FK-101", "code": "FK-101", "status": "active"},
     {"name": "Shim SH-200", "code": "SH-200", "status": "active"},
@@ -67,9 +67,9 @@ models_data = [
 for md in models_data:
     pm, created = ProductModel.objects.get_or_create(code=md["code"], defaults=md)
     if created:
-        print(f"  📦 Model yaratildi: {pm.name}")
+        print(f"  [Model] Model yaratildi: {pm.name}")
 
-# ── 4. Work Types ──
+# -- 4. Work Types --
 work_types_data = [
     # FK-101
     {"name": "Tikish", "product_model__code": "FK-101", "price": 5000},
@@ -93,6 +93,6 @@ for wtd in work_types_data:
         name=wtd["name"], product_model=pm, defaults={"price": wtd["price"]}
     )
     if created:
-        print(f"  🔧 Ish turi yaratildi: {pm.name} → {wt.name} ({wt.price} so'm)")
+        print(f"  [WorkType] Ish turi yaratildi: {pm.name} -> {wt.name} ({wt.price} so'm)")
 
-print("\n🎉 Test ma'lumotlar tayyor!")
+print("\n[FINISH] Test ma'lumotlar tayyor!")

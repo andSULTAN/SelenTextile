@@ -1,11 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import TouchLayout from "@/components/layout/TouchLayout";
 import { accountsApi, getManagerId, type Worker } from "@/lib/api";
 import { User, CheckCircle2, Loader2, Delete, Banknote, History, Wallet } from "lucide-react";
 
 export default function POSTouchAdvancePage() {
+  const router = useRouter();
+
+  // Double-guard: middleware + page level
+  useEffect(() => {
+    const match = document.cookie.match(/(?:^|;\s*)userRole=([^;]+)/);
+    const role = match ? match[1] : '';
+    if (role === 'ADMIN' || role === 'MANAGER') router.replace('/');
+  }, [router]);
+
   // Input mode: "CODE" = Worker Code kutadi. "AMOUNT" = Summa kutadi.
   const [inputMode, setInputMode] = useState<"CODE" | "AMOUNT">("CODE");
 

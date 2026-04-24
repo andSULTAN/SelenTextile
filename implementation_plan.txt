@@ -1,0 +1,54 @@
+# Frontend Diagnosis and Fix Plan (Selen Textile)
+
+The goal is to ensure the frontend is running correctly, verify all major routes, and synchronize the sidebar navigation links with the actual file structure.
+
+## User Review Required
+
+> [!IMPORTANT]
+> I have identified several inconsistencies in navigation components:
+> - **Sidebar.tsx**: `/models`, `/work-types`, and `/work-log/history` do not have corresponding pages in `src/app/`.
+> - **InventoryMenu.tsx**: `/inventory/dashboard`, `/inventory/alerts`, and `/inventory/suppliers` do not exist in the file system.
+> I will update these links to point to the correct existing paths (e.g., `/admin/reports` instead of `/work-log/history`) and disable/comment out non-existent ones to prevent 404 errors.
+
+## Proposed Changes
+
+### Configuration and Environment
+- Verify `NEXT_PUBLIC_API_URL` in `.env`.
+- Ensure `next.config.ts` is valid.
+
+### Dependencies and Execution
+- Run `npm install` in `frontend/`.
+- Run `npm run dev`.
+- Capture and fix any build or runtime errors.
+
+### Component Fixes
+#### [MODIFY] [Sidebar.tsx](file:///c:/Antigravity%20projects/SelenTextile/frontend/src/components/layout/Sidebar.tsx)
+- Update links to match existing routes:
+  - `/admin/workers` (Confirmed ✅)
+  - `/work-log` (Confirmed ✅)
+  - `/inventory/sklad` (Confirmed ✅)
+  - `/inventory/bichuv` (Verify if it needs a sidebar link)
+  - `/admin/payroll` (Update if needed)
+
+## Open Questions
+
+1. **Missing Pages**: Should I create simple placeholder pages for missing routes (`/models`, `/work-types`, `/inventory/alerts`, etc.), or just remove them from the navigation for now?
+2. **Path Preference**: Should `/admin/payroll` be added to the Sidebar for easier access?
+3. **Route Logic**: Should `/inventory/upakovka` (requested by you) be mapped to `/touch/pack` (existing)?
+
+## Verification Plan
+
+### Browser Verification
+- Visit each requested route at `http://localhost:3000`:
+  - `/`
+  - `/login`
+  - `/inventory/sklad`
+  - `/inventory/bichuv`
+  - `/work-log`
+  - `/tv-dashboard`
+  - `/admin/payroll`
+  - `/touch/cut`
+- Report status: ✅ ISHLAYDI / ❌ XATO / ⚠️ BO'SH SAHIFA
+
+### Automated Checks
+- Verify `npm run dev` output for errors.

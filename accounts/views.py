@@ -9,8 +9,11 @@ from django.utils import timezone
 import datetime
 from django.http import HttpResponse
 
-from .models import Worker, AdvancePayment, SalaryPayment
-from .serializers import WorkerSerializer, WorkerLookupSerializer, AdvancePaymentSerializer
+from .models import Worker, AdvancePayment, SalaryPayment, CustomUser, PERMISSION_CHOICES
+from .serializers import (
+    WorkerSerializer, WorkerLookupSerializer, AdvancePaymentSerializer,
+    UserSerializer, UserCreateSerializer, UserUpdateSerializer,
+)
 from production.models import WorkLog
 
 
@@ -103,6 +106,22 @@ class AdvancePaymentViewSet(viewsets.ModelViewSet):
     queryset = AdvancePayment.objects.all().order_by("-created_at")
     serializer_class = AdvancePaymentSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        worker_id = self.request.query_params.get("worker")
+        month = self.request.query_params.get("month")
+        year = self.request.query_params.get("year")
+        if worker_id:
+            qs = qs.filter(worker_id=worker_id)
+        if month and year:
+            first_day = datetime.date(int(year), int(month), 1)
+            if int(month) == 12:
+                last_day = datetime.date(int(year) + 1, 1, 1) - datetime.timedelta(days=1)
+            else:
+                last_day = datetime.date(int(year), int(month) + 1, 1) - datetime.timedelta(days=1)
+            qs = qs.filter(date__gte=first_day, date__lte=last_day)
+        return qs
+
 
 def calculate_worker_payroll(worker, month, year):
     # Bir oylik intervalni yopiq oraliq sifatida aniqlaymiz
@@ -188,17 +207,124 @@ class PaySalaryAPIView(APIView):
         )
         return Response({"message": "Tolov muvaffaqiyatli amalga oshdi va Oylik yopildi!"})
 
+class UserManagementViewSet(viewsets.ModelViewSet):
+    """
+    Tizim foydalanuvchilari CRUD.
+    GET    /api/accounts/users/              — ro'yxat
+    POST   /api/accounts/users/              — yangi yaratish
+    GET    /api/accounts/users/{id}/         — bitta
+    PATCH  /api/accounts/users/{id}/         — tahrirlash
+    DELETE /api/accounts/users/{id}/         — o'chirish
+    POST   /api/accounts/users/{id}/set-permissions/ — huquqlarni yangilash
+    """
+    queryset = CustomUser.objects.all().order_by("-date_joined")
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return UserCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return UserUpdateSerializer
+        return UserSerializer
+
+    @action(detail=True, methods=["post"], url_path="set-permissions")
+    def set_permissions(self, request, pk=None):
+        user = self.get_object()
+        perms = request.data.get("permissions", [])
+        valid_codes = {p[0] for p in PERMISSION_CHOICES}
+        perms = [p for p in perms if p in valid_codes]
+        user.permissions_list = perms
+        user.save(update_fields=["permissions_list"])
+        return Response({"permissions": user.permissions_list})
+
+    @action(detail=True, methods=["post"], url_path="toggle-active")
+    def toggle_active(self, request, pk=None):
+        user = self.get_object()
+        user.is_active = not user.is_active
+        user.save(update_fields=["is_active"])
+        return Response({"id": user.id, "is_active": user.is_active})
+
+
+class PinLoginView(APIView):
+    """
+    Touch ekranlar uchun PIN-based login.
+    POST /api/touch/pin-login/  body: { pin: "1234" }
+    PIN CustomUser.pin (hashed) bilan taqqoslanadi.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from django.contrib.auth.hashers import check_password as check_pw
+        pin = request.data.get("pin", "").strip()
+        if not pin:
+            return Response({"error": "PIN kiritilishi shart."}, status=status.HTTP_400_BAD_REQUEST)
+
+        matched_user = None
+        for candidate in CustomUser.objects.filter(is_active=True).exclude(pin=""):
+            if check_pw(pin, candidate.pin):
+                matched_user = candidate
+                break
+
+        if not matched_user:
+            return Response({"error": "Noto'g'ri PIN."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        matched_user.backend = "django.contrib.auth.backends.ModelBackend"
+        login(request, matched_user)
+        from django.middleware.csrf import get_token
+        csrf_token = get_token(request)
+
+        response = Response({
+            "id": matched_user.id,
+            "role": matched_user.role.upper(),
+            "name": matched_user.get_full_name() or matched_user.username,
+            "permissions": matched_user.permissions_list,
+        })
+        response.set_cookie("csrftoken", csrf_token, samesite="Lax")
+        return response
+
+
+class PermissionChoicesAPIView(APIView):
+    """GET /api/accounts/permissions/ — mavjud barcha huquqlar ro'yxati."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        data = [{"codename": code, "label": label} for code, label in PERMISSION_CHOICES]
+        return Response(data)
+
+
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        from django.contrib.auth.hashers import check_password as check_pw
+
         username = request.data.get("username", "").strip()
         password = request.data.get("password", "")
-        if not username or not password:
-            return Response({"error": "Login va parol kiritilishi shart."}, status=status.HTTP_400_BAD_REQUEST)
-        user = authenticate(request, username=username, password=password)
+        pin      = request.data.get("pin", "").strip()
+
+        if not username or (not password and not pin):
+            return Response(
+                {"error": "Login va parol yoki PIN kiritilishi shart."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = None
+
+        # 1. Parol bilan urinish
+        if password:
+            user = authenticate(request, username=username, password=password)
+
+        # 2. PIN bilan urinish (faqat PIN bo'lsa yoki parol ishlamasa)
+        if user is None and pin:
+            try:
+                candidate = CustomUser.objects.get(username=username, is_active=True)
+                if candidate.pin and check_pw(pin, candidate.pin):
+                    candidate.backend = "django.contrib.auth.backends.ModelBackend"
+                    user = candidate
+            except CustomUser.DoesNotExist:
+                pass
+
         if not user:
-            return Response({"error": "Noto'g'ri login yoki parol."}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"error": "Noto'g'ri login yoki parol/PIN."}, status=status.HTTP_401_UNAUTHORIZED)
         login(request, user)
         from django.middleware.csrf import get_token
         csrf_token = get_token(request)
@@ -207,6 +333,7 @@ class LoginAPIView(APIView):
             "username": user.username,
             "full_name": user.get_full_name() or user.username,
             "role": user.role.upper(),
+            "permissions": user.permissions_list,
         })
         response.set_cookie("csrftoken", csrf_token, samesite="Lax")
         return response
@@ -226,6 +353,7 @@ class MeAPIView(APIView):
             "username": user.username,
             "full_name": user.get_full_name() or user.username,
             "role": user.role.upper(),
+            "permissions": user.permissions_list,
         })
 
 

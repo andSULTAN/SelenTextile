@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:8000/api/accounts/users/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:8000/api/advances/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:8000/api/workers/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:8000/api/permissions/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(python manage.py shell -c ':*)"
+    ]
+  }
+}

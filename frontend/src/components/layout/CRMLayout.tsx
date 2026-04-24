@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Sidebar from "./Sidebar";
+import dynamic from "next/dynamic";
 import Header from "./Header";
+
+// Sidebar cookie-ga bog'liq — SSR-da hydration mismatch oldini olish uchun ssr:false
+const Sidebar = dynamic(() => import("./Sidebar"), { ssr: false });
 
 interface CRMLayoutProps {
   children: React.ReactNode;
